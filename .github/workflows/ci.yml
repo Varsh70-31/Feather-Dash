@@ -27,7 +27,9 @@ env:
 jobs:
   test:
     name: tests (python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    # shortcut: setup-python has no 3.9 build for ubuntu-latest (26.04), so this
+    # job is pinned; move it back once the 3.9 floor is raised.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
