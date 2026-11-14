@@ -1,0 +1,24 @@
+# Feather Dash -- DEVELOPMENT dependencies.
+#
+# Everything needed to work on the game, regenerate its art and audio, and run
+# the checks. Install with:  make dev
+#
+# None of this reaches the Android bundle: buildozer.spec's `requirements` line
+# lists the runtime set only, and source.exclude_dirs keeps tools/ and tests/
+# out of the package entirely.
+
+-r requirements.txt
+
+# Art and audio generation (tools/*.py). Build-time only -- these are the two
+# packages that must never end up in buildozer.spec's requirements, because
+# each adds many megabytes and a fragile cross-compile to every build.
+numpy>=1.24
+Pillow>=10.0
+
+# Tests, lint and the packaging self-test.
+pytest>=7.4
+ruff>=0.5
+# PyYAML is used by packaging/android/selftest.py to actually PARSE the
+# GitHub workflow files rather than grepping them. Without it that check
+# skips, which is exactly the check CI most needs to run.
+PyYAML>=6.0

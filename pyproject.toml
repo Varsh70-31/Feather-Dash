@@ -1,0 +1,63 @@
+[project]
+name = "featherdash"
+version = "2.0.0"
+description = "Feather Dash -- a one-tap flyer built with pygame, resolution-independent and Play Store ready."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "Varshraj Chouhan" }]
+keywords = ["game", "pygame", "arcade", "android", "mobile"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: MacOS X",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: X11 Applications",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Games/Entertainment :: Arcade",
+]
+dependencies = ["pygame>=2.1"]
+
+[project.scripts]
+featherdash = "featherdash.app:main"
+
+[project.urls]
+Homepage = "https://github.com/Varsh70-31/feather-dash"
+Issues = "https://github.com/Varsh70-31/feather-dash/issues"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["featherdash*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+exclude = [".venv", ".buildozer", "bin"]
+
+[tool.ruff.lint]
+# Correctness and import hygiene, not house style. The pyupgrade (UP) family is
+# deliberately absent: the codebase targets Python 3.9 (the floor
+# python-for-android ships against) and several modules use typing.List /
+# Optional on purpose, so UP006/UP007/UP045 would be 300+ "fixes" that change
+# nothing a user can observe and risk breaking the oldest supported runtime.
+select = ["E", "F", "W", "I", "B", "C4", "SIM"]
+# Game loops legitimately carry more local state and branching than a library;
+# these rules fight that without improving the code.
+# C408: dict(a=1) reads better than {"a": 1} for keyword-shaped data.
+ignore = ["E501", "B008", "SIM108", "SIM105", "C408"]
+
+[tool.ruff.lint.per-file-ignores]
+"tools/*" = ["E741", "E702"]
+"tests/*" = ["E402", "F401", "E702"]
+# ruff mis-resolves a closure over an enclosing function's local here; `cvc` is
+# bound in build_near() and the generator demonstrably runs.
+"tools/gen_world.py" = ["F821"]

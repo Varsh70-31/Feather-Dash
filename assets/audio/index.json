@@ -1,0 +1,230 @@
+{
+ "music": {
+  "dawn": {
+   "bars": 8,
+   "bpm": 112.0,
+   "chords": [
+    "F",
+    "C",
+    "G",
+    "Am"
+   ],
+   "file": "music_dawn.wav",
+   "seconds": 17.1429
+  },
+  "day": {
+   "bars": 8,
+   "bpm": 118.0,
+   "chords": [
+    "C",
+    "G",
+    "Am",
+    "F"
+   ],
+   "file": "music_day.wav",
+   "seconds": 16.2712
+  },
+  "dusk": {
+   "bars": 8,
+   "bpm": 106.0,
+   "chords": [
+    "Am",
+    "G",
+    "F",
+    "C"
+   ],
+   "file": "music_dusk.wav",
+   "seconds": 18.1132
+  },
+  "night": {
+   "bars": 8,
+   "bpm": 100.0,
+   "chords": [
+    "Am",
+    "F",
+    "C",
+    "G"
+   ],
+   "file": "music_night.wav",
+   "seconds": 19.2
+  }
+ },
+ "music_rate": 22050,
+ "sfx": {
+  "best": {
+   "pick": "nearest",
+   "variants": [
+    {
+     "file": "best_0.wav",
+     "pitch": 1.0
+    }
+   ]
+  },
+  "coin": {
+   "pick": "random",
+   "variants": [
+    {
+     "file": "coin_0.wav",
+     "pitch": 0.95
+    },
+    {
+     "file": "coin_1.wav",
+     "pitch": 1.0
+    },
+    {
+     "file": "coin_2.wav",
+     "pitch": 1.06
+    }
+   ]
+  },
+  "countdown": {
+   "pick": "nearest",
+   "variants": [
+    {
+     "file": "countdown_0.wav",
+     "pitch": 1.0
+    },
+    {
+     "file": "countdown_1.wav",
+     "pitch": 1.12
+    },
+    {
+     "file": "countdown_2.wav",
+     "pitch": 1.26
+    }
+   ]
+  },
+  "dash": {
+   "pick": "random",
+   "variants": [
+    {
+     "file": "dash_0.wav",
+     "pitch": 0.94
+    },
+    {
+     "file": "dash_1.wav",
+     "pitch": 1.0
+    },
+    {
+     "file": "dash_2.wav",
+     "pitch": 1.07
+    }
+   ]
+  },
+  "fall": {
+   "pick": "nearest",
+   "variants": [
+    {
+     "file": "fall_0.wav",
+     "pitch": 1.0
+    }
+   ]
+  },
+  "flap": {
+   "pick": "random",
+   "variants": [
+    {
+     "file": "flap_0.wav",
+     "pitch": 0.9
+    },
+    {
+     "file": "flap_1.wav",
+     "pitch": 0.97
+    },
+    {
+     "file": "flap_2.wav",
+     "pitch": 1.04
+    },
+    {
+     "file": "flap_3.wav",
+     "pitch": 1.12
+    }
+   ]
+  },
+  "hit": {
+   "pick": "nearest",
+   "variants": [
+    {
+     "file": "hit_0.wav",
+     "pitch": 1.0
+    }
+   ]
+  },
+  "medal": {
+   "pick": "nearest",
+   "variants": [
+    {
+     "file": "medal_0.wav",
+     "pitch": 1.0
+    }
+   ]
+  },
+  "score": {
+   "pick": "random",
+   "variants": [
+    {
+     "file": "score_0.wav",
+     "pitch": 0.94
+    },
+    {
+     "file": "score_1.wav",
+     "pitch": 1.0
+    },
+    {
+     "file": "score_2.wav",
+     "pitch": 1.07
+    }
+   ]
+  },
+  "streak": {
+   "pick": "nearest",
+   "variants": [
+    {
+     "file": "streak_0.wav",
+     "pitch": 1.0
+    },
+    {
+     "file": "streak_1.wav",
+     "pitch": 1.12
+    },
+    {
+     "file": "streak_2.wav",
+     "pitch": 1.26
+    }
+   ]
+  },
+  "ui_back": {
+   "pick": "nearest",
+   "variants": [
+    {
+     "file": "ui_back_0.wav",
+     "pitch": 1.0
+    }
+   ]
+  },
+  "ui_tap": {
+   "pick": "random",
+   "variants": [
+    {
+     "file": "ui_tap_0.wav",
+     "pitch": 0.96
+    },
+    {
+     "file": "ui_tap_1.wav",
+     "pitch": 1.04
+    }
+   ]
+  },
+  "unlock": {
+   "pick": "nearest",
+   "variants": [
+    {
+     "file": "unlock_0.wav",
+     "pitch": 1.0
+    }
+   ]
+  }
+ },
+ "sfx_rate": 44100,
+ "version": 1
+}

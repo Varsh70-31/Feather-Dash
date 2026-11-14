@@ -1,0 +1,350 @@
+name: android
+
+# Two jobs, one workflow:
+#
+#   pull request / manual  ->  debug APK, uploaded as a build artifact so a
+#                              reviewer can sideload the change.
+#   tag v*                 ->  signed App Bundle, attached to a GitHub Release.
+#
+# A cold run takes 40-60 minutes: it downloads the Android SDK and NDK and
+# cross-compiles CPython and every native recipe for two ABIs. A warm run with
+# the caches intact is more like 10.
+#
+# ---------------------------------------------------------------------------
+# REPOSITORY SECRETS REQUIRED FOR A RELEASE
+# ---------------------------------------------------------------------------
+# Settings -> Secrets and variables -> Actions -> New repository secret
+#
+#   ANDROID_KEYSTORE_BASE64    the upload keystore, base64 encoded, single line
+#   ANDROID_KEYSTORE_PASSWORD  the keystore passphrase
+#   ANDROID_KEY_ALIAS          the key alias inside it (e.g. "upload")
+#   ANDROID_KEY_PASSWORD       the key passphrase (often the same as the store)
+#
+# Produce the first one WITHOUT printing it to a terminal:
+#
+#   macOS:  base64 < ~/.featherdash/upload.keystore | tr -d '\n' | pbcopy
+#   Linux:  base64 -w0 ~/.featherdash/upload.keystore | xclip -selection c
+#
+# then paste into the secret. GitHub masks these in logs, but this workflow
+# also never echoes them, writes the keystore with umask 077 into RUNNER_TEMP,
+# and deletes it in an always() step.
+#
+# packaging/android/make_keystore.sh creates the keystore and prints exactly
+# these instructions at the end.
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: "debug (APK) or release (AAB, needs the signing secrets)"
+        required: true
+        default: debug
+        type: choice
+        options: [debug, release]
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: "1"
+  # Gradle's default heap is far too small for the p4a project and fails with
+  # "Expiring Daemon because JVM heap space is exhausted" partway through
+  # merging two ABIs. The daemon is pointless in CI anyway.
+  GRADLE_OPTS: "-Xmx4g -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx4g"
+
+jobs:
+  build:
+    name: ${{ (startsWith(github.ref, 'refs/tags/v') || github.event.inputs.build_type == 'release') && 'release aab' || 'debug apk' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    # Writing is only needed by the tag path, which creates the Release.
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Tag builds need the full history for the release notes step.
+          fetch-depth: 0
+
+      - name: Decide build type
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [ "${{ startsWith(github.ref, 'refs/tags/v') }}" = "true" ]; then
+            echo "kind=release" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.inputs.build_type }}" = "release" ]; then
+            echo "kind=release" >> "$GITHUB_OUTPUT"
+          else
+            echo "kind=debug" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          # NOT 3.12+: python-for-android still imports `distutils` in a few
+          # recipes, and 3.12 removed it from the standard library. 3.11 is the
+          # newest version p4a is reliably happy on.
+          python-version: "3.11"
+
+      - uses: actions/setup-java@v4
+        with:
+          # Android Gradle Plugin 8.x requires JDK 17 and rejects anything
+          # older; it is also not yet happy on 21.
+          distribution: temurin
+          java-version: "17"
+
+      - name: System dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            git zip unzip autoconf automake libtool libtool-bin libltdl-dev \
+            pkg-config cmake ninja-build m4 gettext autopoint \
+            build-essential ccache \
+            zlib1g-dev libffi-dev libssl-dev libbz2-dev liblzma-dev \
+            libsqlite3-dev libreadline-dev libncurses-dev libncursesw5-dev
+
+      - name: libtinfo5 (ncurses 5, for the Android build-tools' aidl)
+        # libtinfo5 was dropped in Ubuntu 24.04, which is what ubuntu-latest
+        # now is, but some Android build-tools binaries (aidl among them) are
+        # still linked against ncurses 5. Its absence is the classic
+        # "Aidl is not found" failure, ~40 minutes into the build.
+        #
+        # Three ways in, in order of robustness. What is NOT here is a
+        # version-pinned archive.ubuntu.com pool URL: the pool keeps only the
+        # CURRENT version of each package, so such a URL rots by design. The
+        # one that used to be here (6.3-2ubuntu0.1) 404s today -- the pool now
+        # holds 6.3-2ubuntu0.3 -- which meant `curl -f` failed, the else-branch
+        # printed a warning, and the fallback that exists to prevent the build
+        # failure never ran even once.
+        run: |
+          set -euo pipefail
+          install_ok() { ldconfig -p | grep -q 'libtinfo\.so\.5'; }
+
+          # 1. Plain apt. Works on a 22.04 runner and on any image that still
+          #    carries the package.
+          sudo apt-get install -y libtinfo5 2>/dev/null || true
+
+          # 2. The jammy pocket, added temporarily. Version-independent: apt
+          #    resolves whatever the current jammy libtinfo5 is.
+          if ! install_ok; then
+            echo "libtinfo5 not in this release; trying the jammy pocket"
+            echo "deb http://archive.ubuntu.com/ubuntu jammy universe" \
+              | sudo tee /etc/apt/sources.list.d/jammy-libtinfo5.list >/dev/null
+            sudo apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/jammy-libtinfo5.list \
+                                -o Dir::Etc::sourceparts=- \
+                                -o APT::Get::List-Cleanup=0 || true
+            sudo apt-get install -y libtinfo5 || true
+            # Removed immediately: leaving a jammy pocket enabled would let a
+            # later apt-get pull noble packages back to jammy versions.
+            sudo rm -f /etc/apt/sources.list.d/jammy-libtinfo5.list
+            sudo apt-get update || true
+          fi
+
+          # 3. snapshot.ubuntu.com, which is immutable by contract -- a
+          #    timestamped URL is the one kind that cannot rot.
+          if ! install_ok; then
+            echo "jammy pocket did not provide it; trying the Ubuntu snapshot service"
+            deb=libtinfo5_6.3-2ubuntu0.1_amd64.deb
+            if curl -fsSLO "http://snapshot.ubuntu.com/ubuntu/20240101T000000Z/pool/universe/n/ncurses/${deb}"; then
+              sudo dpkg -i "${deb}" || sudo apt-get -f install -y
+              rm -f "${deb}"
+            fi
+          fi
+
+          if install_ok; then
+            echo "libtinfo5 present: $(ldconfig -p | grep 'libtinfo\.so\.5' | head -n 1)"
+          else
+            # Deliberately fatal. This step exists to turn a cryptic failure 40
+            # minutes from now into a clear one right now; a ::warning:: here is
+            # exactly how the dead URL above went unnoticed. If a future runner
+            # genuinely no longer needs ncurses 5, delete this step rather than
+            # soften it back into a warning.
+            echo "::error::libtinfo5 could not be installed by any of the three"
+            echo "::error::routes. The Android build-tools' aidl needs ncurses 5"
+            echo "::error::and the build would fail with 'Aidl is not found'."
+            exit 1
+          fi
+
+      - name: Python build tooling
+        run: |
+          python -m pip install --upgrade pip
+          # Pinned, both of them. Cython 3.x breaks several p4a recipes that
+          # still rely on pre-3.0 semantics, and an unpinned buildozer turns a
+          # reproducible build into a lottery.
+          python -m pip install "buildozer==1.5.0" "Cython==0.29.36" virtualenv
+          python -m pip install -r requirements-dev.txt
+
+      - name: Validate buildozer.spec
+        # Sixty seconds here beats forty minutes followed by a typo.
+        run: python packaging/android/validate_spec.py buildozer.spec
+
+      - name: Generate branding art if absent
+        # assets/branding/ is produced by tools/gen_brand.py. If it is not
+        # committed, buildozer fails on icon.filename with a bare traceback.
+        # numpy and Pillow come from requirements-dev.txt and are build-time
+        # only; neither reaches the bundle.
+        run: |
+          if [ ! -f assets/branding/icon_1024.png ] || [ ! -f assets/branding/presplash.png ]; then
+            echo "branding art missing -- generating"
+            python tools/gen_brand.py
+          else
+            echo "branding art present"
+          fi
+
+      - name: Cache buildozer global state
+        uses: actions/cache@v4
+        with:
+          # The expensive half: the Android SDK, the NDK and the p4a checkout.
+          # This is several GB, and a repository's total Actions cache is 10 GB,
+          # so expect older entries to be evicted. If the cache starts thrashing
+          # or the upload dominates the run, delete this step -- correctness
+          # does not depend on it, only speed.
+          path: |
+            ~/.buildozer
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: buildozer-global-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-global-${{ runner.os }}-
+
+      - name: Cache project build directory
+        uses: actions/cache@v4
+        with:
+          # The per-project p4a distribution. Keyed on the requirements line so
+          # that adding a dependency correctly invalidates it.
+          path: .buildozer
+          key: buildozer-project-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-project-${{ runner.os }}-
+
+      # ------------------------------------------------------------------
+      # debug
+      # ------------------------------------------------------------------
+      - name: Build debug APK
+        if: steps.mode.outputs.kind == 'debug'
+        run: buildozer -v android debug
+
+      - name: Upload debug APK
+        if: steps.mode.outputs.kind == 'debug'
+        uses: actions/upload-artifact@v4
+        with:
+          name: featherdash-debug-apk
+          path: bin/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      # ------------------------------------------------------------------
+      # release
+      # ------------------------------------------------------------------
+      - name: Decode the upload keystore
+        if: steps.mode.outputs.kind == 'release'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "${KEYSTORE_B64}" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set. See the comment at the top of this file."
+            exit 1
+          fi
+          # umask before creating anything: the keystore must never be
+          # world-readable, even on an ephemeral runner.
+          umask 077
+          mkdir -p "${RUNNER_TEMP}/signing"
+          printf '%s' "${KEYSTORE_B64}" | base64 -d > "${RUNNER_TEMP}/signing/upload.keystore"
+          # Size only -- never the contents, never a fingerprint that could
+          # confirm a guess.
+          echo "keystore decoded ($(wc -c < "${RUNNER_TEMP}/signing/upload.keystore") bytes)"
+
+      - name: Build release AAB
+        if: steps.mode.outputs.kind == 'release'
+        env:
+          # buildozer reads exactly these four names and hands them to gradle's
+          # signing configuration.
+          P4A_RELEASE_KEYSTORE: ${{ runner.temp }}/signing/upload.keystore
+          P4A_RELEASE_KEYSTORE_PASSWD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          P4A_RELEASE_KEYALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          P4A_RELEASE_KEYALIAS_PASSWD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: buildozer -v android release
+
+      - name: Confirm the bundle is actually signed
+        if: steps.mode.outputs.kind == 'release'
+        run: |
+          set -euo pipefail
+          # If the keystore variables do not reach gradle, buildozer falls back
+          # to the Android debug key and says so only deep in the log. Play
+          # rejects such a bundle, and the rejection arrives hours later. Two
+          # checks, cheapest first: a signature block must exist at all, and
+          # its certificate must not be the well-known debug certificate
+          # (CN=Android Debug, O=Android, C=US).
+          aab=$(find bin -maxdepth 1 -name '*.aab' -type f | head -n 1)
+          if [ -z "${aab}" ]; then
+            echo "::error::release build produced no .aab"
+            exit 1
+          fi
+          if ! unzip -l "${aab}" | grep -Eqi 'META-INF/.*\.(RSA|EC|DSA)'; then
+            echo "::error::${aab} has no signature block -- the signing secrets did not reach gradle"
+            exit 1
+          fi
+          subject=$(keytool -printcert -jarfile "${aab}" 2>/dev/null | grep -m1 'Owner:' || true)
+          echo "certificate ${subject:-<could not read>}"
+          case "${subject}" in
+            *"Android Debug"*)
+              echo "::error::${aab} is signed with the Android DEBUG key. Play will reject it."
+              exit 1
+              ;;
+          esac
+          echo "signed: ${aab}"
+
+      - name: Upload AAB as a workflow artifact
+        if: steps.mode.outputs.kind == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: featherdash-release-aab
+          path: bin/*.aab
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Attach the bundle to the GitHub Release
+        if: steps.mode.outputs.kind == 'release' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          # The built-in token, not a third-party action: one less dependency
+          # to pin and audit on the path that touches the signing key.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if ! gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release create "${TAG}" \
+              --title "Feather Dash ${TAG}" \
+              --generate-notes
+          fi
+          gh release upload "${TAG}" bin/*.aab --clobber
+          echo "attached to https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}"
+
+      # ------------------------------------------------------------------
+      # always
+      # ------------------------------------------------------------------
+      - name: Shred the keystore
+        if: always()
+        run: |
+          # The runner is destroyed anyway, but a cached layer, a core dump or
+          # a debug-tmate session should not be able to find it.
+          rm -rf "${RUNNER_TEMP}/signing" || true
+
+      - name: Upload the buildozer log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildozer-logs
+          path: |
+            .buildozer/android/platform/build-*/build.log
+            .buildozer/android/platform/python-for-android/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7

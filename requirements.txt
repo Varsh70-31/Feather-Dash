@@ -1,1 +1,18 @@
-pygame
+# Feather Dash -- RUNTIME dependencies.
+#
+# This is the set the game needs to actually run, on desktop and inside the
+# Android bundle. It is deliberately tiny: every line here is megabytes in the
+# APK and another native recipe that python-for-android can fail to build.
+#
+# Verified against the real imports -- `grep -rE '^(import|from)' featherdash/`
+# finds only the standard library plus pygame, with two lazy, exception-guarded
+# imports of plyer and jnius that are supplied by python-for-android on device
+# and are not needed (and not used) on desktop.
+#
+# numpy and Pillow are NOT here. They are build-time only, imported solely by
+# the art and audio generators in tools/, and they live in requirements-dev.txt.
+#
+#   development, art generation, tests  ->  requirements-dev.txt
+#   what ships in the APK/AAB           ->  `requirements` in buildozer.spec
+
+pygame>=2.5,<3
