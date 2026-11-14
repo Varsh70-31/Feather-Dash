@@ -24,8 +24,8 @@ dependencies = ["pygame>=2.1"]
 featherdash = "featherdash.app:main"
 
 [project.urls]
-Homepage = "https://github.com/Varsh70-31/feather-dash"
-Issues = "https://github.com/Varsh70-31/feather-dash/issues"
+Homepage = "https://github.com/Varsh70-31/Feather-Dash"
+Issues = "https://github.com/Varsh70-31/Feather-Dash/issues"
 
 [build-system]
 requires = ["setuptools>=61"]

@@ -31,7 +31,7 @@ FROM --platform=linux/amd64 ubuntu:22.04
 
 LABEL org.opencontainers.image.title="Feather Dash Android build" \
       org.opencontainers.image.description="buildozer + python-for-android toolchain" \
-      org.opencontainers.image.source="https://github.com/Varsh70-31/Flap.py"
+      org.opencontainers.image.source="https://github.com/Varsh70-31/Feather-Dash"
 
 # Pinned toolchain versions. Bump these deliberately, one at a time, and
 # rebuild the image; never let them float.
