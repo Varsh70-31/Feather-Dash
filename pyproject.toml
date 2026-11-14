@@ -36,7 +36,12 @@ include = ["featherdash*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-filterwarnings = ["error::DeprecationWarning"]
+filterwarnings = [
+    "error::DeprecationWarning",
+    # pygame 2.6 imports pkg_resources wherever setuptools is installed (stock on
+    # Python 3.9); that is pygame's deprecation, not ours.
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning",
+]
 
 [tool.ruff]
 line-length = 100
